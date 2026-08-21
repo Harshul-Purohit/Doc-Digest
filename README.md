@@ -1,36 +1,26 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# DocDigest
 
-## Getting Started
+DocDigest is an AI-powered application built with TypeScript that allows users to generate concise summaries from any webpage link. By simply pasting a URL, the system scrapes the page content and uses the Gemini API to produce a clear, digestible summary of the information.
 
-First, run the development server:
+## ✨ Key Features
+- **Link-based summarization**: Paste any website link to instantly get a summary.
+- **AI-powered**: Uses Gemini API for accurate and context-aware summaries.
+- **Time-saving**: Quickly condenses long documentation, articles, or blogs into short briefs.
+- **User-friendly**: Designed for simplicity and ease of use in a browser environment.
+- **Scalable SaaS-ready model**: Can be extended with usage limits and subscription plans.
 
-```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
-```
+## 🚀 Use Cases
+- Summarizing technical documentation for faster understanding.
+- Extracting key points from lengthy articles or research papers.
+- Creating quick briefs for interview preparation or study notes.
+- Building SaaS products that monetize AI-powered summarization.
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+## 🔑 How It Works
+1. User pastes a webpage link into the application.
+2. The system scrapes the content from the URL.
+3. Gemini API processes the text and generates a concise summary.
+4. The summary is displayed in a clean, readable format.
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+---
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
-
-## Learn More
-
-To learn more about Next.js, take a look at the following resources:
-
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
-
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
-
-## Deploy on Vercel
-
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
-
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+DocDigest helps users cut through overwhelming amounts of text and focus on the essential information, making learning and research faster and more efficient.
