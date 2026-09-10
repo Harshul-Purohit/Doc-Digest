@@ -1,5 +1,9 @@
+import { connectToDatabase } from '@/lib/db';
+import { getClientIp } from '@/lib/ip';
 import { isValidUrl, scrapePage } from '@/lib/scraper';
 import { buildSummaryPrompt, streamSummary } from '@/lib/gemini';
+import { Usage } from '@/models/Usage';
+import { Summary } from '@/models/Summary';
 
 export async function POST(request: Request) {
   try {
@@ -29,6 +33,45 @@ export async function POST(request: Request) {
       );
     }
 
+    let dbConnected = false;
+    let identifier = '127.0.0.1';
+
+    try {
+      await connectToDatabase();
+      dbConnected = true;
+      identifier = getClientIp(request);
+    } catch (dbError) {
+      console.warn(
+        '⚠️ Database connection failed. Proceeding with summary without rate-limiting/persistence:',
+        dbError
+      );
+    }
+
+    if (dbConnected) {
+      try {
+        let usage = await Usage.findOne({ identifier });
+        if (!usage) {
+          usage = new Usage({ identifier, count: 0, lastUsedAt: new Date() });
+        }
+
+        if (usage.count >= 3) {
+          return Response.json(
+            { error: 'Free generation limit reached (3/3). Please upgrade to continue.' },
+            { status: 429 }
+          );
+        }
+
+        usage.count += 1;
+        usage.lastUsedAt = new Date();
+        await usage.save();
+      } catch (usageError) {
+        console.warn(
+          '⚠️ Usage verification/increment failed, allowing request:',
+          usageError
+        );
+      }
+    }
+
     let scrapedData;
     try {
       scrapedData = await scrapePage(url);
@@ -46,14 +89,28 @@ export async function POST(request: Request) {
       content: scrapedData.content,
     });
 
+    let fullSummary = '';
     const encoder = new TextEncoder();
     const stream = new ReadableStream({
       async start(controller) {
         try {
           for await (const chunk of streamSummary(prompt)) {
+            fullSummary += chunk;
             controller.enqueue(encoder.encode(chunk));
           }
           controller.close();
+
+          if (dbConnected) {
+            try {
+              await Summary.create({
+                url,
+                title: scrapedData.title,
+                summary: fullSummary,
+              });
+            } catch (dbError) {
+              console.error('Failed to save summary to database:', dbError);
+            }
+          }
         } catch (streamError: unknown) {
           const errorMessage =
             streamError instanceof Error

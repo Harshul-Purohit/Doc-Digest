@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useRef } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import {
   BookOpen,
   Sparkles,
@@ -36,6 +36,12 @@ const EXAMPLE_URLS = [
   },
 ];
 
+interface UsageInfo {
+  count: number;
+  limit: number;
+  remaining: number;
+}
+
 export default function Home() {
   const [url, setUrl] = useState('');
   const [isLoading, setIsLoading] = useState(false);
@@ -43,8 +49,27 @@ export default function Home() {
   const [summary, setSummary] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
+  const [usage, setUsage] = useState<UsageInfo | null>(null);
 
   const summaryRef = useRef<HTMLDivElement>(null);
+
+  const fetchUsage = async () => {
+    try {
+      const response = await fetch('/api/usage');
+      if (response.ok) {
+        const data: UsageInfo = await response.json();
+        setUsage(data);
+      }
+    } catch (err) {
+      console.error('Failed to fetch usage info:', err);
+    }
+  };
+
+  useEffect(() => {
+    fetchUsage();
+  }, []);
+
+  const isLimitReached = usage !== null && usage.remaining === 0;
 
   const handleDigest = async (targetUrl: string) => {
     const trimmedUrl = targetUrl.trim();
@@ -55,6 +80,11 @@ export default function Home() {
 
     if (!isValidUrl(trimmedUrl)) {
       setError('Please provide a valid HTTP or HTTPS URL (e.g., https://example.com).');
+      return;
+    }
+
+    if (isLimitReached) {
+      setError('Free generation limit reached (3/3). Please upgrade to continue.');
       return;
     }
 
@@ -112,6 +142,7 @@ export default function Home() {
     } finally {
       setIsLoading(false);
       setStatusText('');
+      fetchUsage();
     }
   };
 
@@ -156,6 +187,26 @@ export default function Home() {
           </div>
 
           <div className="flex items-center gap-3">
+            {/* Usage Status Badge */}
+            {usage !== null && (
+              <div
+                className={`inline-flex items-center gap-2 rounded-full px-3.5 py-1 text-xs font-semibold backdrop-blur-md transition-all ${
+                  isLimitReached
+                    ? 'border border-amber-500/30 bg-amber-500/15 text-amber-300 shadow-sm shadow-amber-500/10 animate-pulse'
+                    : 'border border-purple-500/25 bg-purple-500/10 text-purple-300 shadow-sm shadow-purple-500/10'
+                }`}
+              >
+                <Zap
+                  className={`h-3.5 w-3.5 ${
+                    isLimitReached ? 'text-amber-400' : 'text-purple-400'
+                  }`}
+                />
+                <span>
+                  Generations: <strong className="font-bold">{usage.remaining}/3 left</strong>
+                </span>
+              </div>
+            )}
+
             <div className="inline-flex items-center gap-2 rounded-full border border-violet-500/20 bg-violet-500/10 px-3.5 py-1 text-xs font-semibold text-violet-300 backdrop-blur-md">
               <Sparkles className="h-3.5 w-3.5 text-fuchsia-400 animate-pulse" />
               <span>AI Web Digest</span>
@@ -189,11 +240,15 @@ export default function Home() {
                   type="url"
                   value={url}
                   onChange={(e) => setUrl(e.target.value)}
-                  placeholder="Paste URL (e.g., https://docs.nextjs.org/...)"
-                  className="w-full bg-transparent py-3 text-sm text-white placeholder-zinc-500 focus:outline-none"
-                  disabled={isLoading}
+                  placeholder={
+                    isLimitReached
+                      ? 'Free limit reached (0/3 left). Upgrade to continue.'
+                      : 'Paste URL (e.g., https://docs.nextjs.org/...)'
+                  }
+                  className="w-full bg-transparent py-3 text-sm text-white placeholder-zinc-500 focus:outline-none disabled:opacity-50 disabled:cursor-not-allowed"
+                  disabled={isLoading || isLimitReached}
                 />
-                {url && !isLoading && (
+                {url && !isLoading && !isLimitReached && (
                   <button
                     type="button"
                     onClick={() => setUrl('')}
@@ -204,7 +259,7 @@ export default function Home() {
                 )}
                 <button
                   type="submit"
-                  disabled={isLoading || !url.trim()}
+                  disabled={isLoading || !url.trim() || isLimitReached}
                   className="flex shrink-0 items-center gap-2 rounded-xl bg-gradient-to-r from-violet-600 to-purple-600 px-6 py-3 text-sm font-semibold text-white shadow-lg shadow-violet-600/30 transition-all hover:from-violet-500 hover:to-purple-500 hover:shadow-violet-500/40 focus:outline-none focus:ring-2 focus:ring-violet-500 disabled:opacity-50 disabled:cursor-not-allowed"
                 >
                   {isLoading ? (
@@ -223,6 +278,18 @@ export default function Home() {
             </div>
           </form>
 
+          {/* Upgrade / Limit Reached Banner */}
+          {isLimitReached && (
+            <div className="mt-4 rounded-xl border border-amber-500/30 bg-amber-950/20 p-4 text-center backdrop-blur-md">
+              <div className="flex items-center justify-center gap-2 text-sm font-medium text-amber-300">
+                <AlertTriangle className="h-4 w-4 shrink-0 text-amber-400" />
+                <span>
+                  Free generation limit reached (3/3 used). Upgrade to continue generating unlimited digests.
+                </span>
+              </div>
+            </div>
+          )}
+
           {/* Quick Preset Example URL Badges */}
           <div className="mt-4 flex flex-wrap items-center justify-center gap-2 text-xs text-zinc-400">
             <span className="font-medium text-zinc-500">Try an example:</span>
@@ -234,8 +301,8 @@ export default function Home() {
                   setUrl(item.url);
                   handleDigest(item.url);
                 }}
-                disabled={isLoading}
-                className="inline-flex items-center gap-1.5 rounded-lg border border-violet-500/15 bg-zinc-900/60 px-3 py-1 text-xs font-medium text-zinc-300 transition-all hover:border-violet-500/40 hover:bg-violet-950/40 hover:text-violet-300 disabled:opacity-50"
+                disabled={isLoading || isLimitReached}
+                className="inline-flex items-center gap-1.5 rounded-lg border border-violet-500/15 bg-zinc-900/60 px-3 py-1 text-xs font-medium text-zinc-300 transition-all hover:border-violet-500/40 hover:bg-violet-950/40 hover:text-violet-300 disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 <span>{item.name}</span>
                 <ExternalLink className="h-3 w-3 text-violet-400" />
