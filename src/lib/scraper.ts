@@ -41,7 +41,7 @@ const MAX_CONTENT_LENGTH = 12000;
  * Standard browser User-Agent header to avoid basic bot blocking.
  */
 const DEFAULT_USER_AGENT =
-  'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36';
+  'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0.0.0 Safari/537.36';
 
 /**
  * Fetches raw HTML content from a given URL with browser headers and timeout handling.
@@ -70,23 +70,24 @@ export async function fetchHtml(
       headers: {
         'User-Agent': DEFAULT_USER_AGENT,
         Accept:
-          'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8',
+          'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8',
         'Accept-Language': 'en-US,en;q=0.9',
+        'Cache-Control': 'max-age=0',
       },
       signal: controller.signal,
     });
 
     if (!response.ok) {
-      if (response.status === 404) {
-        throw new Error(`HTTP 404 Not Found: Page does not exist at ${url}`);
-      }
-      if (response.status === 403) {
+      if (response.status === 401 || response.status === 403) {
         throw new Error(
-          `HTTP 403 Forbidden: Access denied by target host at ${url}`
+          'Target site blocks automated reading (HTTP 403/401). Try another documentation URL.'
         );
       }
+      if (response.status === 404) {
+        throw new Error('Webpage not found (HTTP 404). Please verify the link.');
+      }
       throw new Error(
-        `HTTP Error ${response.status} (${response.statusText}): Failed to fetch ${url}`
+        `Failed to fetch webpage (HTTP ${response.status}).`
       );
     }
 
@@ -96,12 +97,14 @@ export async function fetchHtml(
     if (error instanceof Error) {
       if (error.name === 'AbortError') {
         throw new Error(
-          `Request timed out after ${timeoutMs}ms while attempting to fetch ${url}`
+          'Page request timed out. Target website may be slow or blocking automated requests.'
         );
       }
       // Re-throw custom detailed HTTP errors directly
       if (
-        error.message.startsWith('HTTP ') ||
+        error.message.includes('HTTP 403/401') ||
+        error.message.includes('HTTP 404') ||
+        error.message.startsWith('Failed to fetch webpage') ||
         error.message.startsWith('Invalid URL')
       ) {
         throw error;

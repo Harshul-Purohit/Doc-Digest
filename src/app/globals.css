@@ -58,7 +58,7 @@ body {
   box-shadow: 0 0 15px -3px rgba(168, 85, 247, 0.25);
 }
 
-/* Smooth custom scrollbars */
+/* Smooth custom purple scrollbars */
 ::-webkit-scrollbar {
   width: 8px;
   height: 8px;
@@ -69,11 +69,23 @@ body {
 }
 
 ::-webkit-scrollbar-thumb {
-  background: #27272a;
+  background: #3f3f46;
   border-radius: 4px;
+  border: 2px solid #09090b;
 }
 
 ::-webkit-scrollbar-thumb:hover {
-  background: #7c3aed;
+  background: #8b5cf6;
+}
+
+/* Global text selection highlight */
+::selection {
+  background-color: rgba(139, 92, 246, 0.35);
+  color: #ffffff;
+}
+
+::-moz-selection {
+  background-color: rgba(139, 92, 246, 0.35);
+  color: #ffffff;
 }
 

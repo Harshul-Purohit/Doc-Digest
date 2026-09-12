@@ -23,16 +23,16 @@ import { isValidUrl } from '@/lib/scraper';
 
 const EXAMPLE_URLS = [
   {
-    name: 'Next.js App Routing',
-    url: 'https://nextjs.org/docs/app/building-your-application/routing',
+    name: 'Next.js App Router Docs',
+    url: 'https://nextjs.org/docs/app',
   },
   {
     name: 'React 19 Overview',
     url: 'https://react.dev/blog/2024/04/25/react-19',
   },
   {
-    name: 'Tailwind CSS v4.0',
-    url: 'https://tailwindcss.com/blog/tailwindcss-v4',
+    name: 'Cheerio Parsing Guide',
+    url: 'https://cheerio.js.org',
   },
 ];
 
@@ -93,6 +93,11 @@ export default function Home() {
     setIsLoading(true);
     setStatusText('Fetching webpage...');
 
+    // Auto-scroll down smoothly to the summary section when digestion starts
+    setTimeout(() => {
+      summaryRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    }, 150);
+
     try {
       const response = await fetch('/api/summarize', {
         method: 'POST',
@@ -132,6 +137,7 @@ export default function Home() {
         if (!firstChunkReceived) {
           firstChunkReceived = true;
           setStatusText('Streaming response...');
+          summaryRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
         }
 
         const chunk = decoder.decode(value, { stream: true });
@@ -240,10 +246,16 @@ export default function Home() {
                   type="url"
                   value={url}
                   onChange={(e) => setUrl(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter' && !e.shiftKey) {
+                      e.preventDefault();
+                      handleSubmit(e);
+                    }
+                  }}
                   placeholder={
                     isLimitReached
                       ? 'Free limit reached (0/3 left). Upgrade to continue.'
-                      : 'Paste URL (e.g., https://docs.nextjs.org/...)'
+                      : 'Paste URL (e.g., https://nextjs.org/docs/app)'
                   }
                   className="w-full bg-transparent py-3 text-sm text-white placeholder-zinc-500 focus:outline-none disabled:opacity-50 disabled:cursor-not-allowed"
                   disabled={isLoading || isLimitReached}
@@ -302,7 +314,7 @@ export default function Home() {
                   handleDigest(item.url);
                 }}
                 disabled={isLoading || isLimitReached}
-                className="inline-flex items-center gap-1.5 rounded-lg border border-violet-500/15 bg-zinc-900/60 px-3 py-1 text-xs font-medium text-zinc-300 transition-all hover:border-violet-500/40 hover:bg-violet-950/40 hover:text-violet-300 disabled:opacity-50 disabled:cursor-not-allowed"
+                className="inline-flex items-center gap-1.5 rounded-lg border border-violet-500/15 bg-zinc-900/60 px-3 py-1 text-xs font-medium text-zinc-300 transition-all hover:border-violet-500/40 hover:bg-violet-950/40 hover:text-violet-300 disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer"
               >
                 <span>{item.name}</span>
                 <ExternalLink className="h-3 w-3 text-violet-400" />
@@ -332,14 +344,13 @@ export default function Home() {
           )}
 
           {/* Summary Display Area */}
-          <div className="mt-10">
+          <div className="mt-10" ref={summaryRef}>
             {isLoading && !summary && (
               <SummarySkeleton statusText={statusText} />
             )}
 
             {(summary || (isLoading && summary)) && (
               <div
-                ref={summaryRef}
                 className="relative rounded-2xl border border-violet-500/25 bg-zinc-900/70 p-6 shadow-2xl backdrop-blur-xl sm:p-8 glow-purple"
               >
                 {/* Action Controls Bar */}
@@ -356,7 +367,7 @@ export default function Home() {
                       type="button"
                       onClick={handleCopy}
                       disabled={!summary}
-                      className="flex items-center gap-2 rounded-lg border border-violet-500/20 bg-violet-500/10 px-3.5 py-1.5 text-xs font-semibold text-violet-200 transition-all hover:bg-violet-600 hover:text-white focus:outline-none focus:ring-2 focus:ring-violet-500/40"
+                      className="flex items-center gap-2 rounded-lg border border-violet-500/20 bg-violet-500/10 px-3.5 py-1.5 text-xs font-semibold text-violet-200 transition-all hover:bg-violet-600 hover:text-white focus:outline-none focus:ring-2 focus:ring-violet-500/40 disabled:opacity-50"
                     >
                       {copied ? (
                         <>
@@ -366,7 +377,7 @@ export default function Home() {
                       ) : (
                         <>
                           <Copy className="h-3.5 w-3.5" />
-                          <span>Copy Summary</span>
+                          <span>Copy Markdown</span>
                         </>
                       )}
                     </button>
