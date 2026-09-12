@@ -19,6 +19,7 @@ import {
 } from 'lucide-react';
 import { RichTextSummary } from '@/components/RichTextSummary';
 import { SummarySkeleton } from '@/components/SummarySkeleton';
+import { VantaWavesBackground } from '@/components/VantaWavesBackground';
 import { isValidUrl } from '@/lib/scraper';
 
 const EXAMPLE_URLS = [
@@ -177,7 +178,9 @@ export default function Home() {
   };
 
   return (
-    <div className="flex min-h-screen flex-col bg-purple-radial bg-purple-grid text-zinc-100">
+    <div className="flex min-h-screen flex-col bg-transparent text-zinc-100 relative z-10">
+      {/* 3D Vanta Waves Background Layer */}
+      <VantaWavesBackground />
       {/* Navigation Header */}
       <header className="sticky top-0 z-50 border-b border-violet-500/10 bg-zinc-950/80 backdrop-blur-md">
         <div className="mx-auto flex max-w-7xl items-center justify-between px-6 py-4">

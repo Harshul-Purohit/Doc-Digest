@@ -21,12 +21,16 @@
 }
 
 :root {
-  --background: #09090b;
+  --background: #0a0714;
   --foreground: #f4f4f5;
 }
 
+html {
+  background-color: #0a0714;
+}
+
 body {
-  background-color: var(--background);
+  background-color: transparent;
   color: var(--foreground);
   font-family: var(--font-sans);
   min-height: 100vh;
