@@ -2,7 +2,6 @@ import { GoogleGenAI } from '@google/genai';
 
 /**
  * Validates and retrieves the Gemini API key from environment variables.
- * Throws a descriptive error if missing.
  */
 const apiKey = process.env.GEMINI_API_KEY;
 
@@ -17,26 +16,40 @@ if (!apiKey) {
  */
 export const ai = new GoogleGenAI({ apiKey });
 
-/**
- * Interface representing the payload required to build a structured summary prompt.
- */
 export interface SummaryPromptPayload {
   title: string;
   url: string;
   content: string;
 }
 
-/**
- * Type definition for text stream chunks yielded during response generation.
- */
 export type TextStreamChunk = string;
 
 /**
- * Builds a structured prompt instructing Gemini to generate an executive technical summary
- * matching strict GitHub-Flavored Markdown (GFM) hierarchy and formatting rules.
- *
- * @param payload - The scraped page details containing title, url, and clean content.
- * @returns Formatted prompt string ready for Gemini generation.
+ * Helper function to delay execution for a given number of milliseconds.
+ */
+const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
+
+/**
+ * Checks if an error is considered transient/retryable (503, 429, rate limits, server capacity).
+ */
+function isRetryableError(error: unknown): boolean {
+  const msg = error instanceof Error ? error.message : String(error);
+  const normalized = msg.toLowerCase();
+  return (
+    normalized.includes('503') ||
+    normalized.includes('429') ||
+    normalized.includes('high demand') ||
+    normalized.includes('service unavailable') ||
+    normalized.includes('resource_exhausted') ||
+    normalized.includes('too many requests') ||
+    normalized.includes('overloaded') ||
+    normalized.includes('unavailable') ||
+    normalized.includes('quota')
+  );
+}
+
+/**
+ * Builds a structured prompt instructing Gemini to generate an executive technical summary.
  */
 export function buildSummaryPrompt(payload: SummaryPromptPayload): string {
   const sanitizedTitle = (payload.title || 'Untitled Document').trim();
@@ -79,12 +92,19 @@ Constraints:
 }
 
 /**
- * Asynchronously streams response chunks from Google Gemini using gemini-2.5-flash.
- * Falls back to gemini-3.6-flash if gemini-2.5-flash is deprecated/unavailable for the active API key.
+ * List of fallback models to attempt if the primary model is unavailable or overloaded.
+ */
+const MODEL_FALLBACK_CHAIN = [
+  'gemini-2.5-flash',
+  'gemini-2.0-flash',
+  'gemini-1.5-flash',
+];
+
+/**
+ * Asynchronously streams response chunks from Google Gemini with automatic retries and model fallback.
  *
  * @param prompt - The input prompt text.
- * @returns AsyncGenerator yielding TextStreamChunk (string) fragments as they arrive.
- * @throws Detailed Error if stream generation fails or encounters network/quota issues.
+ * @returns AsyncGenerator yielding TextStreamChunk fragments.
  */
 export async function* streamSummary(
   prompt: string
@@ -93,42 +113,54 @@ export async function* streamSummary(
     throw new Error('Invalid or empty prompt provided to streamSummary.');
   }
 
-  let responseStream;
+  let lastError: unknown = null;
 
-  try {
-    try {
-      responseStream = await ai.models.generateContentStream({
-        model: 'gemini-2.5-flash',
-        contents: prompt,
-      });
-    } catch (primaryError: unknown) {
-      const errorMsg = primaryError instanceof Error ? primaryError.message : String(primaryError);
-      // Fallback if gemini-2.5-flash returns deprecation / NOT_FOUND error from Google API
-      if (
-        errorMsg.includes('gemini-2.5-flash') ||
-        errorMsg.includes('NOT_FOUND') ||
-        errorMsg.includes('404')
-      ) {
-        responseStream = await ai.models.generateContentStream({
-          model: 'gemini-3.6-flash',
+  for (const modelName of MODEL_FALLBACK_CHAIN) {
+    // Retry up to 2 times (3 attempts total per model) with a 1.5s delay
+    const maxRetries = 2;
+    for (let attempt = 0; attempt <= maxRetries; attempt++) {
+      try {
+        const responseStream = await ai.models.generateContentStream({
+          model: modelName,
           contents: prompt,
         });
-      } else {
-        throw primaryError;
-      }
-    }
 
-    for await (const chunk of responseStream) {
-      if (chunk.text) {
-        yield chunk.text;
+        // Test stream iteration and yield chunks
+        let chunksYielded = 0;
+        for await (const chunk of responseStream) {
+          if (chunk.text) {
+            chunksYielded++;
+            yield chunk.text;
+          }
+        }
+
+        // If we successfully streamed content, we are done
+        if (chunksYielded > 0) {
+          return;
+        }
+      } catch (error: unknown) {
+        lastError = error;
+        const errorMsg = error instanceof Error ? error.message : String(error);
+        console.warn(
+          `⚠️ Model ${modelName} attempt ${attempt + 1}/${maxRetries + 1} failed: ${errorMsg}`
+        );
+
+        if (isRetryableError(error) && attempt < maxRetries) {
+          console.log(`⏱️ Waiting 1.5s before retry ${attempt + 1}...`);
+          await sleep(1500);
+          continue;
+        }
+
+        // If not retryable or max retries exceeded for this model, break loop to try fallback model
+        break;
       }
     }
-  } catch (error: unknown) {
-    if (error instanceof Error) {
-      throw new Error(`Gemini API Streaming Error: ${error.message}`);
-    }
-    throw new Error(
-      'An unexpected error occurred while streaming content from Google Gemini.'
-    );
   }
+
+  // If all models and retries failed
+  const finalMessage =
+    lastError instanceof Error
+      ? lastError.message
+      : 'All Gemini models are currently unavailable.';
+  throw new Error(`Google Gemini stream error: ${finalMessage}`);
 }

@@ -2,7 +2,8 @@ import { connectToDatabase } from '@/lib/db';
 import { getClientIp } from '@/lib/ip';
 import { isValidUrl, scrapePage } from '@/lib/scraper';
 import { buildSummaryPrompt, streamSummary } from '@/lib/gemini';
-import { Usage } from '@/models/Usage';
+import { getUserFromRequest } from '@/lib/auth';
+import { DailyUsage } from '@/models/DailyUsage';
 import { Summary } from '@/models/Summary';
 
 export async function POST(request: Request) {
@@ -33,30 +34,39 @@ export async function POST(request: Request) {
       );
     }
 
-    let dbConnected = false;
-    let identifier = '127.0.0.1';
+    const user = getUserFromRequest(request);
+    const todayStr = new Date().toISOString().split('T')[0]; // UTC date (YYYY-MM-DD)
+    let identifier = getClientIp(request);
+    if (user && user.id) {
+      identifier = user.id;
+    }
 
+    let dbConnected = false;
     try {
       await connectToDatabase();
       dbConnected = true;
-      identifier = getClientIp(request);
     } catch (dbError) {
       console.warn(
-        '⚠️ Database connection failed. Proceeding with summary without rate-limiting/persistence:',
+        '⚠️ Database connection failed. Proceeding with summary without persistence:',
         dbError
       );
     }
 
-    if (dbConnected) {
+    // Rate Limiting Check (Admins bypass limit)
+    const isAdmin = user?.role === 'admin';
+    if (dbConnected && !isAdmin) {
       try {
-        let usage = await Usage.findOne({ identifier });
+        let usage = await DailyUsage.findOne({ identifier, date: todayStr });
         if (!usage) {
-          usage = new Usage({ identifier, count: 0, lastUsedAt: new Date() });
+          usage = new DailyUsage({ identifier, date: todayStr, count: 0 });
         }
 
         if (usage.count >= 3) {
           return Response.json(
-            { error: 'Free generation limit reached (3/3). Please upgrade to continue.' },
+            {
+              error:
+                'Free generation limit reached (3/3 for today). Limit resets at midnight UTC.',
+            },
             { status: 429 }
           );
         }
@@ -100,9 +110,10 @@ export async function POST(request: Request) {
           }
           controller.close();
 
-          if (dbConnected) {
+          if (dbConnected && fullSummary.trim().length > 0) {
             try {
               await Summary.create({
+                userId: user ? user.id : undefined,
                 url,
                 title: scrapedData.title,
                 summary: fullSummary,
@@ -112,11 +123,13 @@ export async function POST(request: Request) {
             }
           }
         } catch (streamError: unknown) {
-          const errorMessage =
-            streamError instanceof Error
-              ? streamError.message
-              : 'Streaming generation failed.';
-          controller.error(new Error(errorMessage));
+          console.error('Stream generation error:', streamError);
+          controller.enqueue(
+            encoder.encode(
+              '\n\n> ⚠️ **Service Notice:** Google Gemini is currently under high load. Please try again in a few moments.'
+            )
+          );
+          controller.close();
         }
       },
     });
